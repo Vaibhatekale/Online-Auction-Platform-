@@ -56,7 +56,7 @@ app.get("/", (req, res) => {
 });
 
 // ✅ Signup Route
-app.post("/signup", async (req, res) => {
+app.post("/api/signup", async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -80,7 +80,7 @@ app.post("/signup", async (req, res) => {
 });
 
 // ✅ Signin Route
-app.post("/signin", async (req, res) => {
+app.post("/api/signin", async (req, res) => {
   try {
     const { username, password } = req.body;
     const user = await User.findOne({ username });
@@ -120,17 +120,70 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // ✅ Logout Route
-app.post("/logout", authenticate, (req, res) => {
+app.post("/api/logout", authenticate, (req, res) => {
   res.json({ message: "Logout successful" });
 });
 
 // ✅ Get all auction items
-app.get("/auctions", async (req, res) => {
+app.get("/api/auctions", async (req, res) => {
   try {
     const auctions = await AuctionItem.find();
     res.json(auctions);
   } catch (error) {
     console.error("Fetching Auctions Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ✅ Create a new auction item
+app.post("/api/auctions", async (req, res) => {
+  try {
+    const { itemName, description, currentBid, closingTime } = req.body;
+    const newAuction = new AuctionItem({ itemName, description, currentBid, closingTime });
+    await newAuction.save();
+
+    res.status(201).json({ message: "Auction created successfully" });
+  } catch (error) {
+    console.error("Auction Creation Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ✅ Place a Bid
+app.post("/api/bids", async (req, res) => {
+  try {
+    const { auctionId, bidderName, bidAmount } = req.body;
+    const auction = await AuctionItem.findById(auctionId);
+
+    if (!auction) return res.status(404).json({ message: "Auction not found" });
+
+    if (bidAmount <= auction.currentBid) {
+      return res.status(400).json({ message: "Bid must be higher than current bid" });
+    }
+
+    auction.currentBid = bidAmount;
+    auction.highestBidder = bidderName;
+    await auction.save();
+
+    res.json({ message: "Bid placed successfully", auction });
+  } catch (error) {
+    console.error("Bidding Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ✅ Get all bids (Dummy Response for Now)
+app.get("/api/bids", (req, res) => {
+  res.json({ message: "Bids API is working!" });
+});
+
+// ✅ Get all users
+app.get("/api/users", async (req, res) => {
+  try {
+    const users = await User.find({}, { password: 0 }); // Don't send passwords
+    res.json(users);
+  } catch (error) {
+    console.error("Fetching Users Error:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });

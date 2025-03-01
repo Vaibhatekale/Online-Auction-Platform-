@@ -1,0 +1,28 @@
+.signin-container {
+    text-align: center;
+    margin-top: 50px;
+  }
+  
+  .signin-container input {
+    display: block;
+    margin: 10px auto;
+    padding: 10px;
+    width: 200px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+  }
+  
+  .signin-container button {
+    padding: 10px 20px;
+    background: blue;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+  }
+  
+  .signin-container button:hover {
+    background: darkblue;
+  }
+
+  
