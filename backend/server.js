@@ -7,6 +7,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const Razorpay = require("razorpay"); // ✅ Import Razorpay SDK
 
 const app = express();
 const server = http.createServer(app);
@@ -22,6 +23,12 @@ app.use(express.json());
 app.use(cors());
 
 const SECRET_KEY = process.env.JWT_SECRET || "default_secret_key";
+
+// ✅ Razorpay instance
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
 
 // ✅ Connect to MongoDB
 mongoose
@@ -93,6 +100,52 @@ const authenticate = (req, res, next) => {
   });
 };
 
+// ✅ Razorpay Payment Route
+app.post("/api/create-order", authenticate, async (req, res) => {
+  try {
+    const { amount } = req.body; // Amount in the smallest currency unit (e.g., paisa for INR)
+    const orderOptions = {
+      amount: amount * 100, // Amount is in paise (smallest unit of currency)
+      currency: "INR",
+      receipt: `receipt_${Math.random() * 100000}`,
+      payment_capture: 1, // Auto capture after successful payment
+    };
+
+    razorpay.orders.create(orderOptions, (err, order) => {
+      if (err) {
+        console.error("Error creating Razorpay order:", err);
+        return res.status(500).json({ message: "Error creating payment order" });
+      }
+      res.json({ order });
+    });
+  } catch (error) {
+    console.error("Payment Order Creation Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ✅ Verify Razorpay Payment Route
+app.post("/api/verify-payment", authenticate, async (req, res) => {
+  try {
+    const { paymentId, orderId, signature } = req.body;
+
+    const body = `${orderId}|${paymentId}`;
+    const expectedSignature = require("crypto")
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(body)
+      .digest("hex");
+
+    if (signature === expectedSignature) {
+      return res.json({ message: "Payment verified successfully" });
+    } else {
+      return res.status(400).json({ message: "Invalid payment signature" });
+    }
+  } catch (error) {
+    console.error("Payment Verification Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 // ✅ Signup Route
 app.post("/api/signup", async (req, res) => {
   try {
@@ -162,14 +215,14 @@ app.post("/api/auctions", async (req, res) => {
   }
 });
 
-// ✅ Place a Bid (REST API)
-app.post("/api/bids", async (req, res) => {
+// ✅ Correct API Route for placing a bid
+app.post("/api/auctions/:id/bid", async (req, res) => {
   try {
-    const { auctionId, bidderName, bidAmount } = req.body;
-    const auction = await AuctionItem.findById(auctionId);
+    const { bidAmount, bidderName } = req.body;
+    const auction = await AuctionItem.findById(req.params.id);
 
     if (!auction || auction.isClosed) {
-      return res.status(404).json({ message: "Auction closed or not found" });
+      return res.status(404).json({ message: "Auction not found or already closed" });
     }
 
     if (bidAmount <= auction.currentBid) {
@@ -180,7 +233,11 @@ app.post("/api/bids", async (req, res) => {
     auction.highestBidder = bidderName;
     await auction.save();
 
-    io.emit("bidUpdated", { auctionId, currentBid: bidAmount, highestBidder: bidderName });
+    io.emit("bidUpdated", { 
+      auctionId: req.params.id, 
+      currentBid: bidAmount, 
+      highestBidder: bidderName 
+    });
 
     res.json({ message: "Bid placed successfully", auction });
   } catch (error) {
